@@ -18,28 +18,33 @@ COPY apps ./apps
 RUN PRISMA_SKIP_POSTINSTALL_GENERATE=true bun install --ignore-scripts
 
 # =============================================================================
-# STAGE 2: Ultra-Minimal Migrator - Only Prisma
+# STAGE 2: Migrator / Seeder - Prisma 7 + local schema, migrations and seed
 # =============================================================================
 FROM oven/bun:1.4.4 AS migrator
 
-WORKDIR /app
+WORKDIR /app/packages/db
 
-# Copy local Prisma schema and migrations from workspace
-COPY packages/db/prisma ./packages/db/prisma
+# Local schema, migrations, seed data and Prisma config from the workspace
+COPY packages/db/prisma ./prisma
+COPY packages/db/prisma.config.ts ./prisma.config.ts
+COPY packages/db/scripts/generate-prisma-client-js.js ./scripts/
 
-# Create minimal package.json for Prisma runtime (also used by seeder)
-RUN echo '{"name":"migrator","type":"module","dependencies":{"prisma":"^6.14.0","@prisma/client":"^6.14.0","@trycompai/db":"^1.3.4","zod":"^3.25.7"}}' > package.json
+# Minimal runtime package.json, pinned to the versions packages/db uses
+RUN echo '{"name":"migrator","private":true,"scripts":{"migrate":"prisma migrate deploy","seed":"bun prisma/seed/seed.ts"},"dependencies":{"prisma":"7.6.0","@prisma/client":"7.6.0","@prisma/adapter-pg":"7.6.0","dotenv":"^16.4.5","zod":"^4.3.6"}}' > package.json
 
-# Install ONLY Prisma dependencies
 RUN bun install
 
-# Ensure Prisma can find migrations relative to the published schema path
-# We copy the local migrations into the published package's dist directory
-RUN cp -R packages/db/prisma/migrations node_modules/@trycompai/db/dist/
+# Generate the full Prisma client into node_modules/@prisma/client (used by seed.ts)
+RUN node scripts/generate-prisma-client-js.js
 
-# Run migrations against the combined schema published by @trycompai/db
-RUN echo "Running migrations against @trycompai/db combined schema"
-CMD ["bunx", "prisma", "migrate", "deploy", "--schema=node_modules/@trycompai/db/dist/schema.prisma"]
+# Fail the build if the seed's dependencies or generated models are missing
+RUN bun -e "require('@prisma/adapter-pg'); require('zod'); \
+    const { Prisma } = require('@prisma/client'); \
+    if (!Prisma.ModelName.FrameworkEditorFramework) throw new Error('Prisma client has no models');"
+
+# Default: apply migrations (prisma.config.ts reads DATABASE_URL).
+# Seed with: bun prisma/seed/seed.ts
+CMD ["bunx", "prisma", "migrate", "deploy"]
 
 # =============================================================================
 # STAGE 3: App Builder
