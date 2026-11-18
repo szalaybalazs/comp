@@ -5,23 +5,14 @@ FROM oven/bun:1.4.4 AS deps
 
 WORKDIR /app
 
-# Copy workspace configuration (bunfig.toml pins the hoisted linker that the
-# later stages expect; Bun >= 1.3 otherwise defaults to isolated installs)
+# Copy workspace configuration
 COPY package.json bun.lock bunfig.toml ./
 
-# Copy package.json files for all packages (exclude local db; use published @trycompai/db)
-COPY packages/kv/package.json ./packages/kv/
-COPY packages/ui/package.json ./packages/ui/
-COPY packages/email/package.json ./packages/email/
-COPY packages/integration-platform/package.json ./packages/integration-platform/
-COPY packages/integrations/package.json ./packages/integrations/
-COPY packages/utils/package.json ./packages/utils/
-COPY packages/tsconfig/package.json ./packages/tsconfig/
-COPY packages/analytics/package.json ./packages/analytics/
+# Include all workspace packages
+COPY packages ./packages
+COPY apps ./apps
 
-# Copy app package.json files
-COPY apps/app/package.json ./apps/app/
-COPY apps/portal/package.json ./apps/portal/
+
 
 # Install all dependencies
 RUN PRISMA_SKIP_POSTINSTALL_GENERATE=true bun install --ignore-scripts
