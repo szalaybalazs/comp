@@ -88,6 +88,9 @@ ENV NEXT_PUBLIC_BETTER_AUTH_URL=$NEXT_PUBLIC_BETTER_AUTH_URL \
     NODE_OPTIONS=--max_old_space_size=6144
 
 # Build the app
+# Model .prisma files are gitignored in apps/app/prisma/schema; copy them in
+# from packages/db so `prisma generate` emits a client with all models
+RUN cd apps/app && bun run db:getschema
 RUN cd apps/app && SKIP_ENV_VALIDATION=true bun run build:docker
 
 # =============================================================================
@@ -136,6 +139,9 @@ ENV NEXT_PUBLIC_BETTER_AUTH_URL=$NEXT_PUBLIC_BETTER_AUTH_URL \
     NODE_OPTIONS=--max_old_space_size=6144
 
 # Build the portal
+# Model .prisma files are gitignored in apps/portal/prisma/schema; copy them in
+# from packages/db so `prisma generate` emits a client with all models
+RUN cd apps/portal && bun run db:getschema
 RUN cd apps/portal && SKIP_ENV_VALIDATION=true bun run build:docker
 
 # =============================================================================
