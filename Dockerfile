@@ -112,9 +112,22 @@ COPY apps/portal ./apps/portal
 # Bring in node_modules for build and prisma prebuild
 COPY --from=deps /app/node_modules ./node_modules
 
-# Pre-combine schemas for portal build
-RUN cd packages/db && node scripts/combine-schemas.js
-RUN cp packages/db/dist/schema.prisma apps/portal/prisma/schema.prisma
+# Prepare Prisma schemas and client
+RUN cd packages/db \
+    && node scripts/combine-schemas.js \
+    && node scripts/generate-prisma-client-js.js
+
+RUN cp packages/db/dist/schema.prisma \
+    apps/portal/prisma/schema.prisma
+
+# Build the local workspace packages required by the portal
+RUN cd packages/auth && bun run build
+
+RUN cd packages/company && bun run build
+
+# Verify that the company package is resolvable
+RUN test -f packages/company/dist/index.mjs \
+    && test -e node_modules/@trycompai/company/package.json
 
 # Ensure Next build has required public env at build-time
 ARG NEXT_PUBLIC_BETTER_AUTH_URL
