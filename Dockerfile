@@ -60,8 +60,15 @@ COPY --from=deps /app/node_modules ./node_modules
 # `--ignore-scripts` so packages/db's postinstall was skipped; we run
 # it explicitly here so `next build` can resolve the generated runtime
 # + types when it imports @prisma/client.
-RUN cd packages/db && node scripts/combine-schemas.js \
-                   && node scripts/generate-prisma-client-js.js
+#
+# The app resolves @trycompai/{db,auth,billing,company} through their
+# package.json exports, which point at dist/ — build them before next build.
+# `bun run build` in packages/db generates the Prisma client, compiles
+# dist/ and writes dist/schema.prisma.
+RUN cd packages/db && bun run build
+RUN cd packages/auth && bun run build
+RUN cd packages/billing && bun run build
+RUN cd packages/company && bun run build
 
 # Ensure Next build has required public env at build-time
 ARG NEXT_PUBLIC_BETTER_AUTH_URL
@@ -112,22 +119,14 @@ COPY apps/portal ./apps/portal
 # Bring in node_modules for build and prisma prebuild
 COPY --from=deps /app/node_modules ./node_modules
 
-# Prepare Prisma schemas and client
-RUN cd packages/db \
-    && node scripts/combine-schemas.js \
-    && node scripts/generate-prisma-client-js.js
+# Build the workspace packages the portal resolves via dist/ exports
+# (db also generates the Prisma client and writes dist/schema.prisma)
+RUN cd packages/db && bun run build
+RUN cd packages/auth && bun run build
+RUN cd packages/company && bun run build
 
 RUN cp packages/db/dist/schema.prisma \
     apps/portal/prisma/schema.prisma
-
-# Build the local workspace packages required by the portal
-RUN cd packages/auth && bun run build
-
-RUN cd packages/company && bun run build
-
-# Verify that the company package is resolvable
-RUN test -f packages/company/dist/index.mjs \
-    && test -e node_modules/@trycompai/company/package.json
 
 # Ensure Next build has required public env at build-time
 ARG NEXT_PUBLIC_BETTER_AUTH_URL
